@@ -22,11 +22,19 @@ namespace net_voice.Timer
             Thread TimerThread = new Thread(TimerRun);
             TimerThread.Start();
         }
-
+        /// <summary>
+        /// timer 종료
+        /// </summary>
         public void close()
         {
             run = false;
         }
+
+        /// <summary>
+        /// 객체를  타이머에 등록 
+        /// </summary>
+        /// <param name="obj">타이머에 등록할 객체</param>
+        /// <param name="time">기준 시간 </param>
         public void AddTimer(object obj, int time)
         {
             lock (timerList)
@@ -43,6 +51,10 @@ namespace net_voice.Timer
             }
         }
 
+        /// <summary>
+        /// 해당 객체 타이머 기준 시간 초기화
+        /// </summary>
+        /// <param name="obj"></param>
         public void TimerSet(object obj)
         {
             lock (timerList)
@@ -55,7 +67,10 @@ namespace net_voice.Timer
         }
 
 
-
+        /// <summary>
+        /// 타이머 등록 제거
+        /// </summary>
+        /// <param name="obj">등록 제거할 객체</param>
         public void deleteTimer(object obj)
         {
             lock (timerList)
@@ -68,6 +83,9 @@ namespace net_voice.Timer
         }
 
 
+        /// <summary>
+        /// timer 스레드
+        /// </summary>
         private void TimerRun()
         {
             LinkedList<DictionaryEntry> EventList = new LinkedList<DictionaryEntry>();
@@ -110,6 +128,9 @@ namespace net_voice.Timer
         }
 
 
+        /// <summary>
+        /// timer node 구조체
+        /// </summary>
         private class TimerNode
         {
             private int maxTime;

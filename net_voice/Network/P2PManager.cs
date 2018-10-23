@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
@@ -20,8 +18,9 @@ namespace net_voice.Network
         public event ReceiveVoiceHandler m_ReceiveVoice = null;
         public event ReceiveTextHandler m_ReceiveText = null;
 
-        //private const ushort SERVER_START = 1;
-
+       /// <summary>
+       /// 패킷 type 
+       /// </summary>
         public static ushort ALIVE_SERVER = 2;
         public static ushort CONNECT_SERVER = 3;
         public static ushort CONNECT_SERVER_YES = 4;
@@ -39,16 +38,21 @@ namespace net_voice.Network
         public static ushort DATA_TEXT = 13;
 
 
-
+        /// <summary>
+        /// status
+        /// </summary>
         public static int DISCONNECTED_SERVER = 100;
         public static int CONNECTED_SERVER = 101;
-      
-
-        private const int ID_MAX = 65000;
 
         private int status = DISCONNECTED_SERVER;
+        
+        // id 범위
+        private const int ID_MAX = 65000;        
 
 
+        /// <summary>
+        /// 패킷 struct
+        /// </summary>
         public struct TYPE_HEADER
         {
             public ushort type;
@@ -74,19 +78,24 @@ namespace net_voice.Network
             public ushort id;
         }
 
-        private MyTimer timer;
-        private ushort userid;
-        private List<UserNode> user_list;
-        private Queue<ReceiveDataNode> receiveQue;
-        Thread receiveThread;
-        private NetWorkIO netWorkIO;
-        private Random r = new Random();
-        
 
+        private MyTimer timer;
         private ServerConnect serverConnectTimer;
         private ServerAlive serverAliveTimer;
-        private bool run = true;
+
+        private Random r = new Random();
+        private ushort userid;
+        private List<UserNode> user_list;
+
         private UIHandler uiHandler;
+
+        private NetWorkIO netWorkIO;
+        private Thread receiveThread;
+        private Queue<ReceiveDataNode> receiveQue;     
+ 
+        private bool run = true;      
+
+
 
         public P2PManager(UIHandler uiHandler)
         {
@@ -107,6 +116,7 @@ namespace net_voice.Network
             timer.m_TimerEvent += new MyTimerHandler(timerEvent);
         }
 
+
         public void close()
         {
             netWorkIO.close();
@@ -122,58 +132,64 @@ namespace net_voice.Network
         {                        
             timer.AddTimer(serverConnectTimer, 5);
             receiveThread.Start();
-
             ConnectServer();
         }
 
 
-        private void timerEvent(object obj, int over_time)
+        /// <summary>
+        /// 수신받은 패킷 처리 스레드
+        /// </summary>
+        void receiveDRun()
         {
-            if (obj.GetType().Equals(typeof(ServerConnect)))
-            {                          
-                if(over_time < -10)
+            while (run)
+            {
+                ReceiveDataNode receiveData;
+                lock (receiveQue)
                 {
-                    ConnectServer();
-                    status = DISCONNECTED_SERVER;
-                    timer.deleteTimer(serverAliveTimer);
-                    uiHandler.UIAdd(UIHandler.COVER_VISIBLE, null);
-                    clearUserList();
+                    while (receiveQue.Count == 0)
+                    {
+                        Monitor.Wait(receiveQue);
+                        if (!run) return;
+                    }
+                    receiveData = receiveQue.Dequeue();
                 }
+                taskOperate(receiveData);
             }
-            else if (obj.GetType().Equals(typeof(ServerAlive)))
-            {
-                timer.TimerSet(serverAliveTimer);         
-                SendAliveServer();
-            }
-            else if (obj.GetType().Equals(typeof(UserNode)))
-            {
-                UserNode user = (UserNode)obj;
+        }
 
-                sendPearAlive(user.ep);
-                if (over_time < -5)
-                {
-                    deleteUser(user.id);               
-                }
-                else if(over_time < -2)
-                {
-                    SendIsAlivePear(user.id);                    
-                }
-            }            
+        /// <summary>
+        /// networkIO의 패킷 수신 이벤트
+        /// 이벤트 발생기 수신 대기큐에 저장
+        /// </summary>
+        /// <param name="data"></param>
+        /// <param name="remoteEP"></param>
+        void receiveDataToJob(byte[] data, EndPoint remoteEP)
+        {
+            lock (receiveQue)
+            {
+                receiveQue.Enqueue(new ReceiveDataNode(data, remoteEP));
+                Monitor.Pulse(receiveQue);
+            }
         }
 
 
+        /// <summary>
+        /// 패킷 처리
+        /// </summary>
+        /// <param name="receiveData"></param>
         void taskOperate(ReceiveDataNode receiveData)
         {
             TYPE_HEADER type = ByteToStructure<TYPE_HEADER>(receiveData.data,0);
 
-            Console.WriteLine(type.type);
+            // 서버에서 연결 승인
             if (type.type == CONNECT_SERVER_YES)
-            {               
+            {
                 timer.TimerSet(serverConnectTimer);
                 timer.AddTimer(serverAliveTimer, 2);
                 status = CONNECTED_SERVER;
-                uiHandler.UIAdd(UIHandler.COVER_UNVISIBLE, null);                
+                uiHandler.UIAdd(UIHandler.COVER_UNVISIBLE, null);
             }
+            //서버에서 연결 거절
             else if (type.type == CONNECT_SERVER_NO)
             {
                 if (status == DISCONNECTED_SERVER)
@@ -181,19 +197,25 @@ namespace net_voice.Network
                     userid = (ushort)r.Next(0, ID_MAX);
                 }
             }
+            //ALIVE_SERVER 패킷 
             else if (type.type == ALIVE_SERVER)
             {
                 status = CONNECTED_SERVER;
                 timer.TimerSet(serverConnectTimer);
             }
+            //다른 pear 연결되어있음
             else if (type.type == ISALIVE_PEAR_YES)
             {
-                
+                // pear가 서버에 연결되어있지만
+                // p2p연결이 불가능(멀티 NAT의 경우 NAT가 hairpin기능을 지원하지 않을 경우)
+                // 서버를 경유하는 방법을 사용해야함
             }
+            //다른 pear 연결 되어있지 않음
             else if (type.type == ISALIVE_PEAR_NO)
             {
                 deleteUser(type.id);
             }
+            // 다른 pear정보 수신
             else if (type.type == REACEIVE_PEAR)
             {
                 PEAR_INFO_HEADER pear_info = ByteToStructure<PEAR_INFO_HEADER>(receiveData.data, 0);
@@ -201,12 +223,12 @@ namespace net_voice.Network
                 IPEndPoint ep = new IPEndPoint(pear_info.ip, pear_info.port);
                 UserNode user = new UserNode(pear_info.id, ep);
 
-             
-                addUser(user);                
+                addUser(user);
                 timer.AddTimer(user, 1);
-               
+
                 sendPearAlive(user.ep);
             }
+            // 다른 pear가 주기적으로 보내는 alive 패킷
             else if (type.type == ALIVE_PEAR)
             {
                 UserNode user = findUser(type.id);
@@ -216,10 +238,12 @@ namespace net_voice.Network
                     timer.TimerSet(user);
                 }
             }
+            // 다른 pear연결 종료
             else if (type.type == DEATH_PEAR)
             {
                 deleteUser(type.id);
             }
+            // 다른 pear의 음성 정보
             else if (type.type == DATA_VOICE)
             {
                 UserNode user = findUser(type.id);
@@ -242,12 +266,13 @@ namespace net_voice.Network
                 Array.Copy(receiveData.data, header_size, data, 0, data_size);
 
                 int index = findUserIndex(packet_data.id);
-                if ( !(index < 0))
+                if (!(index < 0))
                 {
                     ReceiveVoice(index, data);
-                } 
-               
+                }
+
             }
+            // 다른 pear의 문자 정보
             else if (type.type == DATA_TEXT)
             {
                 UserNode user = findUser(type.id);
@@ -275,22 +300,60 @@ namespace net_voice.Network
         }
 
 
-        /////// send Data
 
+        /// <summary>
+        /// timer event 
+        /// 일정 시간 주기로 패킷을 전송하거나 검사해야하는 것들
+        /// </summary>
+        /// <param name="obj"></param>
+        /// <param name="over_time"></param>
+        private void timerEvent(object obj, int over_time)
+        {
+            if (obj.GetType().Equals(typeof(ServerConnect)))
+            {
+                if (over_time < -10)
+                {
+                    ConnectServer();
+                    status = DISCONNECTED_SERVER;
+                    timer.deleteTimer(serverAliveTimer);
+                    uiHandler.UIAdd(UIHandler.COVER_VISIBLE, null);
+                    clearUserList();
+                }
+            }
+            else if (obj.GetType().Equals(typeof(ServerAlive)))
+            {
+                timer.TimerSet(serverAliveTimer);
+                SendAliveServer();
+            }
+            else if (obj.GetType().Equals(typeof(UserNode)))
+            {
+                UserNode user = (UserNode)obj;
+
+                sendPearAlive(user.ep);
+                if (over_time < -5)
+                {
+                    deleteUser(user.id);
+                }
+                else if (over_time < -2)
+                {
+                    SendIsAlivePear(user.id);
+                }
+            }
+        }
+
+        
+        /// <summary>
+        /// 기능별 패킷 전송 메소드
+        /// </summary>
         void ConnectServer()
         {
             IPEndPoint localEndPoint = netWorkIO.getLocalEndPoint();
-
-
+            
             CONNECT_SERVER_HEADER connect_server = new CONNECT_SERVER_HEADER();
             connect_server.type = CONNECT_SERVER;
             connect_server.id = userid;
             connect_server.private_ip = (uint)localEndPoint.Address.Address;
             connect_server.private_port = localEndPoint.Port;
-
-
-            Console.WriteLine(connect_server.private_ip);
-            Console.WriteLine(connect_server.private_port);
 
             byte[] data = StructureToByte(connect_server);
             netWorkIO.SendDataToServer(data);
@@ -349,7 +412,6 @@ namespace net_voice.Network
                     UserNode user = (UserNode)itor.Current;
                     netWorkIO.SendData(data, user.ep);
                 }
-
             }
         }
 
@@ -373,13 +435,19 @@ namespace net_voice.Network
                     UserNode user = (UserNode)itor.Current;
                     netWorkIO.SendData(data, user.ep);
                 }
-
             }
         }
 
 
 
-        ///   userList
+
+
+
+       /// <summary>
+       /// 다른 pear들의 정보 = userList
+       ///  userList 관련 메소드
+       /// </summary>
+  
         private UserNode findUser(int id)
         {
             lock (user_list)
@@ -480,6 +548,11 @@ namespace net_voice.Network
 
         
 
+
+
+        /// <summary>
+        /// event 처리
+        /// </summary>
         private void ReceiveVoice(int id,byte[] data)
         {
             if (this.m_ReceiveVoice != null)
@@ -497,46 +570,11 @@ namespace net_voice.Network
        
 
         
-
-
-
-        /////// receive Data
-        void receiveDRun()
-        {
-            while (run)
-            {
-                ReceiveDataNode receiveData;
-                lock (receiveQue)
-                {
-                    while (receiveQue.Count == 0)
-                    {
-                        Monitor.Wait(receiveQue);
-                        if (!run) return;
-                    }
-                    receiveData = receiveQue.Dequeue();
-                }
-
-                taskOperate(receiveData);
-            }
-        }
-
-        void receiveDataToJob(byte[] data, EndPoint remoteEP)
-        {
-            lock (receiveQue)
-            {
-                receiveQue.Enqueue(new ReceiveDataNode(data, remoteEP));
-                Monitor.Pulse(receiveQue);
-            }
-        }
-
-      
-
-      
-
-
-
-
-
+        /// <summary>
+        /// dyte배열 -> 구조체 변환 
+        /// 구조체 -> byte배열 변환
+        /// 
+        /// </summary>
 
 
         public T ByteToStructure<T>(byte[] data, int start)
@@ -560,5 +598,21 @@ namespace net_voice.Network
             return data;
         }
 
+
+        /// <summary>
+        /// 수신 대기큐 node 구조체
+        /// </summary>
+        class ReceiveDataNode
+        {
+            public byte[] data;
+            public EndPoint fromEndPoint;
+            private EndPoint remoteEP;
+
+            public ReceiveDataNode(byte[] data, EndPoint fromEndPoint)
+            {
+                this.data = data;
+                this.fromEndPoint = fromEndPoint;
+            }
+        }
     }
 }

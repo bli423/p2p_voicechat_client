@@ -2,13 +2,6 @@
 using net_voice.Utility;
 using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace net_voice
@@ -29,9 +22,7 @@ namespace net_voice
         }
 
         private void Form1_Load(object sender, EventArgs e)
-        {
-            
-
+        {    
             logQueue = new Queue<string>();
             chatQueue = new Queue<string>();
 
@@ -40,10 +31,13 @@ namespace net_voice
 
             net_mike = new NetMike(uiHandler);
 
-
             net_mike.Run();
             uiHandler.Run();
         }
+
+        /// <summary>
+        /// 프로그램 종료
+        /// </summary>
         private void Form1_FormClosed(object sender, FormClosedEventArgs e)
         {
             uiHandler.close();
@@ -51,8 +45,7 @@ namespace net_voice
         }
 
         private void UIEvent(int type,object obj)
-        {
-           
+        {           
             if (type == UIHandler.TEXT)
             {
                 lock (logQueue)
@@ -79,11 +72,9 @@ namespace net_voice
       
 
 
-        ////////////////////////////////////////////////////////////////////////////
-
-
-
-
+        /// <summary>
+        /// UI event 처리
+        /// </summary>
         private void serverConnectViewVisible()
         {
             server_connect_view.Visible = true;
@@ -92,7 +83,6 @@ namespace net_voice
         {
             server_connect_view.Visible = false;
         }
-
 
         private void chatWrite()
         {

@@ -56,7 +56,6 @@
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Timer\MyTimer.cs" />
-    <Compile Include="Utility\ReceiveDataNode.cs" />
     <Compile Include="Utility\ServerAlive.cs" />
     <Compile Include="Utility\ServerConnect.cs" />
     <Compile Include="Utility\UIHandler.cs" />

@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using net_voice.Media.Wave;
@@ -21,11 +20,12 @@ namespace net_voice
 
         private P2PManager p2PManager;
         private Queue<byte[]> chatQueue;   
-        private int wave_out_count = 0;
-        private int wave_out_amount = 16;
+
+        private const int wave_out_amount = 16;
 
         private Thread textDataSend;
         private UIHandler uiHandler;
+
         private bool run = true;
 
         public NetMike(UIHandler uiHandler)
@@ -68,7 +68,10 @@ namespace net_voice
             textDataSend.Start();  
         }
 
-
+        /// <summary>
+        /// 음성 데이터 수집 이벤트
+        /// </summary>
+        /// <param name="buffer"></param>
         private void waveIn_BufferFull(byte[] buffer)
         {
             byte[] data = new byte[buffer.Length];
@@ -77,18 +80,25 @@ namespace net_voice
             p2PManager.sendVoiceData(data);     
         }
 
-
+        /// <summary>
+        /// 다른 pear에게 수신한 문자 정보 UI handler에 넘겨줌
+        /// </summary>
         private void textReceive(int n, byte[] buffer)
         {
             uiHandler.UIAdd(UIHandler.TEXT, n + " :  "+  Encoding.UTF8.GetString(buffer));
         }
+
+        /// <summary>
+        ///  다른 pear에게 수신한 음성데이터 출력 
+        /// </summary>
         private void voiceReceive(int n,byte[] buffer)
-        {
-           
+        {           
             wave_outList[n].Play(buffer, 0, buffer.Length);
         }
-
-       
+               
+        /// <summary>
+        /// 마이크 초기화
+        /// </summary>
         public void mikeReset()
         {
             wave_in.Stop();
@@ -98,6 +108,11 @@ namespace net_voice
             wave_in.Start();        
         }
 
+
+        /// <summary>
+        /// 문자 데이터 전송 대기큐 등록
+        /// </summary>
+        /// <param name="text"></param>
         public void inputMessage(string text)
         {
             byte[] data = Encoding.UTF8.GetBytes(text);
@@ -109,6 +124,9 @@ namespace net_voice
            
         }
 
+        /// <summary>
+        /// 문자 데이터 전송 스레드
+        /// </summary>
         private void sendDataRun()
         {
             byte[] data = null;
